@@ -65,12 +65,17 @@ while True:
 			counterBTN4 = 0
 	elif (line == "BTN4: 0"):
 		button[3] = False
+		counterBTN4 = 0
 
 	if line.split(":")[0] == "GX":
 		gx = -float(line.split(" ")[1])
+		if abs(gx) < 2:
+			gx = 0
 
 	if line.split(":")[0] == "GY":
 		gy = -float(line.split(" ")[1])
+		if abs(gy) < 2:
+			gy = 0
 
 	if line.split(":")[0] == "scroll_d":
 		scroll = int(float(line.split(" ")[1]))
