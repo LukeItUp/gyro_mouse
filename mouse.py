@@ -33,6 +33,8 @@ def moveMouseTo(mouse, Newpos):
 
 # ---------------------------------------------
 ser = serial.Serial("/dev/ttyUSB0", 115200)
+if (platform.system() == "Windows"):
+	ser = serial.Serial('COM7', 115200)
 mouse = Controller()
 keyboardCTRL = keyboard.Controller()
 button = [False, False, None ,False]
