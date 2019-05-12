@@ -3,15 +3,24 @@
 import serial
 import time
 import sys
+import platform
 import subprocess
 from pynput.mouse import Button, Controller
-
+from pynput import keyboard
 
 def getScreenResolution():
-    output = subprocess.Popen('xrandr | grep "\*" | cut -d" " -f4',shell=True, stdout=subprocess.PIPE).communicate()[0]
-    resolution = output.split()[0].split(b'x')
-    resolution = (int(resolution[0]), int(resolution[1]))
-    return resolution
+	resolution = (0, 0)
+
+	if platform.system() == "Windows":
+		from win32api import GetSystemMetrics
+		resolution = (GetSystemMetrics(0), GetSystemMetrics(1))
+	
+	else:
+		output = subprocess.Popen('xrandr | grep "\*" | cut -d" " -f4',shell=True, stdout=subprocess.PIPE).communicate()[0]
+		resolution = output.split()[0].split(b'x')
+	 
+	resolution = (int(resolution[0]), int(resolution[1]))
+	return resolution
 
 
 def moveMouseTo(mouse, Newpos):
@@ -25,6 +34,7 @@ def moveMouseTo(mouse, Newpos):
 # ---------------------------------------------
 ser = serial.Serial("/dev/ttyUSB0", 115200)
 mouse = Controller()
+keyboardCTRL = keyboard.Controller()
 button = [False, False, None ,False]
 counterBTN4 = 0
 pos = getScreenResolution()
@@ -37,6 +47,9 @@ while True:
 	scroll = 0
 	gx = 0
 	gy = 0
+	ax = 0
+	ay = 0
+	az = 0
 
 	# Read new values
 	line = ser.readline().split("\r\n")[0]
@@ -77,12 +90,36 @@ while True:
 		if abs(gy) < 2:
 			gy = 0
 
+	if line.split(":")[0] == "AX":
+		ax = float(line.split(" ")[1])
+		if abs(ax) < 3:
+			ax = 0
+
+	if line.split(":")[0] == "AY":
+		ay = -float(line.split(" ")[1])
+		if abs(ay) < 3:
+			ay = 0
+
+	if line.split(":")[0] == "AZ":
+		az = -float(line.split(" ")[1])
+		if abs(az) < 1:
+			az = 0
+
 	if line.split(":")[0] == "scroll_d":
 		scroll = int(float(line.split(" ")[1]))
 
+	# Controlling mouse and keyboard
 	if not button[3] :
-		pos[0] = pos[0] + gx
-		pos[1] = pos[1] + gy
+		pos[0] = pos[0] + gx + ay
+		pos[1] = pos[1] + gy + ax
+
+	if (az < -16):
+		keyboardCTRL.press(keyboard.Key.up)
+		keyboardCTRL.release(keyboard.Key.up)	
+
+	if (az > 4) and az != 0:
+		keyboardCTRL.press(keyboard.Key.down)
+		keyboardCTRL.release(keyboard.Key.down)	
 
 	moveMouseTo(mouse, pos)
 	mouse.scroll(0, scroll/10)
