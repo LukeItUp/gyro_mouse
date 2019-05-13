@@ -1,11 +1,9 @@
 #include <stdlib.h>
-//#include "espressif/esp_common.h"
 #include "esp/uart.h"
 #include "FreeRTOS.h"
 #include "task.h"
 #include "esp8266.h"
 #include "i2c/i2c.h"
-//#include "bmp280/bmp280.h"
 
 #define PCF_ADDRESS	0x38
 #define MPU_ADDRESS	0x68
@@ -14,11 +12,10 @@
 #define SDA 12
 #define gpio_wemos_led	2
 
-//					mask	returned value
-#define button1		0x20	// 0b ??0? ????
-#define button2		0x10	// 0b ???0 ????
-#define button3		0x80	// 0b 0??? ????
-#define button4		0x40	// 0b ?0?? ????
+#define button1		0x20
+#define button2		0x10
+#define button3		0x80
+#define button4		0x40
 #define clr_btn		0xf0
 
 #define led1		0xfe
@@ -26,11 +23,12 @@
 #define led123		0xf8
 #define led1234		0xf0
 
-#define PWR_MGMT_1  		0x6B
-#define PWR_MGMT_2  		0x6C
-#define MPU9250_ACCEL_X		0x3b
-#define MPU9250_GYRO_X 		0x43
-#define MPU9250_GYRO_CONFIG 0x1B
+#define PWR_MGMT_1  			0x6B
+#define PWR_MGMT_2  			0x6C
+#define MPU9250_ACCEL_X			0x3B
+#define MPU9250_ACCEL_CONFIG 	0x1C
+#define MPU9250_GYRO_X 			0x43
+#define MPU9250_GYRO_CONFIG 	0x1B
 
 bool mouseBTN1 = false;
 bool mouseBTN2 = false;
@@ -40,6 +38,12 @@ float gx_d = 0;
 float gy_d = 0;
 int16_t gx_b = 0;
 int16_t gy_b = 0;
+float ax_d = 0;
+float ay_d = 0;
+float az_d = 0;
+int16_t ax_b = 0;
+int16_t ay_b = 0;
+int16_t az_b = 0;
 float scroll_d = 0;
 
 void write_byte(uint8_t address, uint8_t register_address, uint8_t data) {
@@ -72,6 +76,8 @@ void MPU9250_start() {
 
 void calculateBias() {
 	uint8_t n = 10;
+
+	// Gyro bias
 	gx_b = 0;
 	gy_b = 0;
 	for (uint8_t i; i < n; i++) {
@@ -81,6 +87,20 @@ void calculateBias() {
 	}
 	gx_b = gx_b /n;
 	gy_b = gy_b /n;
+
+	// accel bias	
+	ax_b = 0;
+	ay_b = 0;
+	az_b = 0;
+	for (uint8_t i; i < n; i++) {
+		ax_b += (read_byte(MPU_ADDRESS, MPU9250_ACCEL_X)<<8)|(read_byte(MPU_ADDRESS, MPU9250_ACCEL_X+1));
+		ay_b += (read_byte(MPU_ADDRESS, MPU9250_ACCEL_X+2)<<8)|(read_byte(MPU_ADDRESS, MPU9250_ACCEL_X+3));
+		az_b += (read_byte(MPU_ADDRESS, MPU9250_ACCEL_X+4)<<8)|(read_byte(MPU_ADDRESS, MPU9250_ACCEL_X+5));
+		vTaskDelay(pdMS_TO_TICKS(10));
+	}
+	ax_b = ax_b /n;
+	ay_b = ay_b /n;
+	az_b = az_b /n;
 }
 
 float getGyroRange() {
@@ -128,14 +148,34 @@ void cycleGyroRange() {
 	}
 }
 
+
+int getAccelRange() {
+	uint8_t data = read_byte(MPU_ADDRESS, MPU9250_ACCEL_CONFIG);
+	data = (data >> 3) & 0b11;
+	
+	switch(data) {
+		case 0:
+			return 16384;
+		case 1:
+			return 8192;
+		case 2:
+			return 4096;
+		case 3:
+			return 2048;
+	}
+}
+
 void printStatus() {
-	printf("__MOUSE_STATUS__\nBTN1: %d\nBTN2: %d\nBTN3: %d\nBTN4: %d\nGX: %f\nGY: %f\nscroll_d: %f\n__EOF__\n", mouseBTN1 , mouseBTN2, mouseBTN3, mouseBTN4, gx_d, gy_d, scroll_d);
+	printf("__MOUSE_STATUS__\nBTN1: %d\nBTN2: %d\nBTN3: %d\nBTN4: %d\nGX: %f\nGY: %f\nAX: %f\nAY: %f\nAZ: %f\nscroll_d: %f\n__EOF__\n", mouseBTN1 , mouseBTN2, mouseBTN3, mouseBTN4, gx_d, gy_d, ax_d, ay_d, az_d,scroll_d);
 }
 
 void mouseTask(void *pvParameters) {
 	uint8_t pcf_byte;
 	int16_t gx;
 	int16_t gy;
+	int16_t ax;
+	int16_t ay;
+	int16_t az;
 	MPU9250_start();
 
 	while (true) {
@@ -151,9 +191,23 @@ void mouseTask(void *pvParameters) {
 		gy = (read_byte(MPU_ADDRESS, MPU9250_GYRO_X+2)<<8)|(read_byte(MPU_ADDRESS, MPU9250_GYRO_X+3));
 		gx = gx - gx_b;
 		gy = gy - gy_b;
-		
 		gx_d = ((float) gx) / getGyroRange();
 		gy_d = ((float) gy) / getGyroRange();
+		
+		// Read Accelerometer
+		ax = (read_byte(MPU_ADDRESS, MPU9250_ACCEL_X)<<8)|(read_byte(MPU_ADDRESS, MPU9250_ACCEL_X+1));
+		ay = (read_byte(MPU_ADDRESS, MPU9250_ACCEL_X+2)<<8)|(read_byte(MPU_ADDRESS, MPU9250_ACCEL_X+3));
+		az = (read_byte(MPU_ADDRESS, MPU9250_ACCEL_X+4)<<8)|(read_byte(MPU_ADDRESS, MPU9250_ACCEL_X+5));
+		ax = ax - ax_b;
+		ay = ay - ay_b;
+		az = az - az_b;
+		ax_d = ((float) ax) / getAccelRange();
+		ay_d = ((float) ay) / getAccelRange();
+		az_d = ((float) az) / getAccelRange();
+		ax_d *= 10;
+		ay_d *= 10;
+		az_d *= 10;
+		
 		scroll_d = 0;
 		// Scrolling
 		if (mouseBTN3) {
