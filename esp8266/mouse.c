@@ -36,8 +36,10 @@ bool mouseBTN3 = false;
 bool mouseBTN4 = false;
 float gx_d = 0;
 float gy_d = 0;
+float gz_d = 0;
 int16_t gx_b = 0;
 int16_t gy_b = 0;
+int16_t gz_b = 0;
 float ax_d = 0;
 float ay_d = 0;
 float az_d = 0;
@@ -80,13 +82,16 @@ void calculateBias() {
 	// Gyro bias
 	gx_b = 0;
 	gy_b = 0;
+	gz_b = 0;
 	for (uint8_t i; i < n; i++) {
 		gx_b += (read_byte(MPU_ADDRESS, MPU9250_GYRO_X)<<8)|(read_byte(MPU_ADDRESS, MPU9250_GYRO_X+1));
 		gy_b += (read_byte(MPU_ADDRESS, MPU9250_GYRO_X+2)<<8)|(read_byte(MPU_ADDRESS, MPU9250_GYRO_X+3));
+		gz_b += (read_byte(MPU_ADDRESS, MPU9250_GYRO_X+4)<<8)|(read_byte(MPU_ADDRESS, MPU9250_GYRO_X+5));
 		vTaskDelay(pdMS_TO_TICKS(10));
 	}
 	gx_b = gx_b /n;
 	gy_b = gy_b /n;
+	gz_b = gz_b /n;
 
 	// accel bias	
 	ax_b = 0;
@@ -166,13 +171,14 @@ int getAccelRange() {
 }
 
 void printStatus() {
-	printf("__MOUSE_STATUS__\nBTN1: %d\nBTN2: %d\nBTN3: %d\nBTN4: %d\nGX: %f\nGY: %f\nAX: %f\nAY: %f\nAZ: %f\nscroll_d: %f\n__EOF__\n", mouseBTN1 , mouseBTN2, mouseBTN3, mouseBTN4, gx_d, gy_d, ax_d, ay_d, az_d,scroll_d);
+	printf("__MOUSE_STATUS__\nBTN1: %d\nBTN2: %d\nBTN3: %d\nBTN4: %d\nGX: %f\nGY: %f\nGZ: %f\nAX: %f\nAY: %f\nAZ: %f\nscroll_d: %f\n__EOF__\n", mouseBTN1 , mouseBTN2, mouseBTN3, mouseBTN4, gx_d, gy_d, gz_d, ax_d, ay_d, az_d,scroll_d);
 }
 
 void mouseTask(void *pvParameters) {
 	uint8_t pcf_byte;
 	int16_t gx;
 	int16_t gy;
+	int16_t gz;
 	int16_t ax;
 	int16_t ay;
 	int16_t az;
@@ -189,11 +195,15 @@ void mouseTask(void *pvParameters) {
 		// Read Gyro
 		gx = (read_byte(MPU_ADDRESS, MPU9250_GYRO_X)<<8)|(read_byte(MPU_ADDRESS, MPU9250_GYRO_X+1));
 		gy = (read_byte(MPU_ADDRESS, MPU9250_GYRO_X+2)<<8)|(read_byte(MPU_ADDRESS, MPU9250_GYRO_X+3));
+		gz = (read_byte(MPU_ADDRESS, MPU9250_GYRO_X+4)<<8)|(read_byte(MPU_ADDRESS, MPU9250_GYRO_X+5));
 		gx = gx - gx_b;
 		gy = gy - gy_b;
+		gz = gz - gz_b;
 		gx_d = ((float) gx) / getGyroRange();
 		gy_d = ((float) gy) / getGyroRange();
+		gz_d = ((float) gz) / getGyroRange();
 		
+
 		// Read Accelerometer
 		ax = (read_byte(MPU_ADDRESS, MPU9250_ACCEL_X)<<8)|(read_byte(MPU_ADDRESS, MPU9250_ACCEL_X+1));
 		ay = (read_byte(MPU_ADDRESS, MPU9250_ACCEL_X+2)<<8)|(read_byte(MPU_ADDRESS, MPU9250_ACCEL_X+3));
