@@ -46,7 +46,6 @@ float az_d = 0;
 int16_t ax_b = 0;
 int16_t ay_b = 0;
 int16_t az_b = 0;
-float scroll_d = 0;
 
 void write_byte(uint8_t address, uint8_t register_address, uint8_t data) {
 	i2c_slave_write(BUS_I2C, address, &register_address, &data, 1);
@@ -83,7 +82,7 @@ void calculateBias() {
 	gx_b = 0;
 	gy_b = 0;
 	gz_b = 0;
-	for (uint8_t i; i < n; i++) {
+	for (uint8_t i = 0; i < n; i++) {
 		gx_b += (read_byte(MPU_ADDRESS, MPU9250_GYRO_X)<<8)|(read_byte(MPU_ADDRESS, MPU9250_GYRO_X+1));
 		gy_b += (read_byte(MPU_ADDRESS, MPU9250_GYRO_X+2)<<8)|(read_byte(MPU_ADDRESS, MPU9250_GYRO_X+3));
 		gz_b += (read_byte(MPU_ADDRESS, MPU9250_GYRO_X+4)<<8)|(read_byte(MPU_ADDRESS, MPU9250_GYRO_X+5));
@@ -97,7 +96,7 @@ void calculateBias() {
 	ax_b = 0;
 	ay_b = 0;
 	az_b = 0;
-	for (uint8_t i; i < n; i++) {
+	for (uint8_t i = 0; i < n; i++) {
 		ax_b += (read_byte(MPU_ADDRESS, MPU9250_ACCEL_X)<<8)|(read_byte(MPU_ADDRESS, MPU9250_ACCEL_X+1));
 		ay_b += (read_byte(MPU_ADDRESS, MPU9250_ACCEL_X+2)<<8)|(read_byte(MPU_ADDRESS, MPU9250_ACCEL_X+3));
 		az_b += (read_byte(MPU_ADDRESS, MPU9250_ACCEL_X+4)<<8)|(read_byte(MPU_ADDRESS, MPU9250_ACCEL_X+5));
@@ -171,7 +170,7 @@ int getAccelRange() {
 }
 
 void printStatus() {
-	printf("__MOUSE_STATUS__\nBTN1: %d\nBTN2: %d\nBTN3: %d\nBTN4: %d\nGX: %f\nGY: %f\nGZ: %f\nAX: %f\nAY: %f\nAZ: %f\nscroll_d: %f\n__EOF__\n", mouseBTN1 , mouseBTN2, mouseBTN3, mouseBTN4, gx_d, gy_d, gz_d, ax_d, ay_d, az_d,scroll_d);
+	printf("__MOUSE_STATUS__\nBTN1: %d\nBTN2: %d\nBTN3: %d\nBTN4: %d\nGX: %f\nGY: %f\nGZ: %f\nAX: %f\nAY: %f\nAZ: %f\n__EOF__\n", mouseBTN1 , mouseBTN2, mouseBTN3, mouseBTN4, gx_d, gy_d, gz_d, ax_d, ay_d, az_d);
 }
 
 void mouseTask(void *pvParameters) {
@@ -184,6 +183,18 @@ void mouseTask(void *pvParameters) {
 	int16_t az;
 	MPU9250_start();
 
+	float alpha = 0.9;
+	float gx_dt = 0;
+	float gy_dt = 0;
+	float gz_dt = 0;	
+	float ax_dt = 0;
+	float ay_dt = 0;
+	float az_dt = 0;
+	float ax_t = 0;
+	float ay_t = 0;
+	float az_t = 0;
+
+
 	while (true) {
 		// read PCF Byte
 		pcf_byte = read_byte_pcf();
@@ -191,6 +202,18 @@ void mouseTask(void *pvParameters) {
 		mouseBTN2 = ((pcf_byte & button2) == 0);
 		mouseBTN3 = ((pcf_byte & button3) == 0);
 		mouseBTN4 = ((pcf_byte & button4) == 0);
+		
+		// Save previous values for filtering
+		gx_dt = gx_d;
+		gy_dt = gy_d;
+		gz_dt = gz_d;
+		ax_dt = ax_d;
+		ay_dt = ay_d;
+		az_dt = az_d;
+		// Save previous measures for high-pass filter
+		ax_t = ((float) ax) / getAccelRange();
+		ay_t = ((float) ay) / getAccelRange();
+		az_t = ((float) az) / getAccelRange();
 		
 		// Read Gyro
 		gx = (read_byte(MPU_ADDRESS, MPU9250_GYRO_X)<<8)|(read_byte(MPU_ADDRESS, MPU9250_GYRO_X+1));
@@ -203,7 +226,6 @@ void mouseTask(void *pvParameters) {
 		gy_d = ((float) gy) / getGyroRange();
 		gz_d = ((float) gz) / getGyroRange();
 		
-
 		// Read Accelerometer
 		ax = (read_byte(MPU_ADDRESS, MPU9250_ACCEL_X)<<8)|(read_byte(MPU_ADDRESS, MPU9250_ACCEL_X+1));
 		ay = (read_byte(MPU_ADDRESS, MPU9250_ACCEL_X+2)<<8)|(read_byte(MPU_ADDRESS, MPU9250_ACCEL_X+3));
@@ -214,17 +236,17 @@ void mouseTask(void *pvParameters) {
 		ax_d = ((float) ax) / getAccelRange();
 		ay_d = ((float) ay) / getAccelRange();
 		az_d = ((float) az) / getAccelRange();
-		ax_d *= 10;
-		ay_d *= 10;
-		az_d *= 10;
 		
-		scroll_d = 0;
-		// Scrolling
-		if (mouseBTN3) {
-			scroll_d = gy_d;
-			gx_d = 0;
-			gy_d = 0;
-		}
+		// Filter data (LOW-PASS)
+		gx_d = alpha * gx_dt + (1-alpha)*gx_d;
+		gy_d = alpha * gy_dt + (1-alpha)*gy_d;
+		gz_d = alpha * gz_dt + (1-alpha)*gz_d;
+		// Filter data (HIGH-PASS)
+		ax_d = alpha * (ax_dt + ax_d - ax_t);
+		ay_d = alpha * (ay_dt + ay_d - ay_t);
+		az_d = alpha * (az_dt + az_d - az_t);
+		
+
 		// Change sensitivity
 		if (mouseBTN4) {
 			//cycleGyroRange();
@@ -232,16 +254,11 @@ void mouseTask(void *pvParameters) {
 
 		printStatus();
 
-		if (false) {
-			printf("BIAS: %d - %d\n", gx_b, gy_b );
-			printf(" RAW: %d - %d\n", gx, gy);
-		}
-
 		mouseBTN1 = false;
 		mouseBTN2 = false;
 		mouseBTN3 = false;
 		mouseBTN4 = false;
-		vTaskDelay(pdMS_TO_TICKS(100));
+		vTaskDelay(pdMS_TO_TICKS(10));
 	}
 }
 
