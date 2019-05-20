@@ -152,7 +152,6 @@ void cycleGyroRange() {
 	}
 }
 
-
 int getAccelRange() {
 	uint8_t data = read_byte(MPU_ADDRESS, MPU9250_ACCEL_CONFIG);
 	data = (data >> 3) & 0b11;
@@ -166,6 +165,35 @@ int getAccelRange() {
 			return 4096;
 		case 3:
 			return 2048;
+	}
+}
+
+void cycleAccelRange() {
+	uint8_t data = read_byte(MPU_ADDRESS, MPU9250_ACCEL_CONFIG);
+	data = (data >> 3) & 0b11;
+	data = (data + 1) %4;
+
+	switch(data) {
+		case 0:
+			write_byte(MPU_ADDRESS, MPU9250_ACCEL_CONFIG, 0b11100111);
+			write_byte_pcf(led1);
+			break;
+		case 1:
+			write_byte(MPU_ADDRESS, MPU9250_ACCEL_CONFIG, 0b11101111);
+			write_byte_pcf(led12);
+			break;
+		case 2:
+			write_byte(MPU_ADDRESS, MPU9250_ACCEL_CONFIG, 0b11110111);
+			write_byte_pcf(led123);
+			break;
+		case 3:
+			write_byte(MPU_ADDRESS, MPU9250_ACCEL_CONFIG, 0b11111111);
+			write_byte_pcf(led1234);
+			break;
+	}
+	uint8_t pcf_byte = read_byte_pcf();
+	while ((pcf_byte & button4) == 0) {
+		pcf_byte = read_byte_pcf();
 	}
 }
 
