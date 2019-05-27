@@ -135,7 +135,7 @@ while True:
 		mouseCTRL.scroll((- 3*data["AZ"] - data["GX"])/5, (3*data["AZ"] + data["GX"])/5)
 	
 	# STOP OR RESET MOUSE CURSOR
-	if BUTTONS["BTN4"] and BTN4_counter > 15:
+	if BUTTONS["BTN4"] and BTN4_counter > 50:
 		BTN4_counter = 0;
 		mousePosition = getScreenResolution()
 		mousePosition["x"] = mousePosition["x"]/2
